@@ -5,3 +5,7 @@
 *.pkl
 .idea/
 out/
+
+# python
+__pycache__/
+out/
