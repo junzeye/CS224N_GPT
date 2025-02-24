@@ -61,7 +61,25 @@ class AdamW(Optimizer):
                 ###
                 ###       Refer to the default project handout for more details.
                 ### YOUR CODE HERE
-                raise NotImplementedError
+                # Initialize state if empty
+                if len(state) == 0:
+                    state['m_t'] = torch.zeros_like(p.data)  # First moment
+                    state['v_t'] = torch.zeros_like(p.data)  # Second moment
+                    state['t'] = 0  # Step count
 
+                # 1. update first & second moments of the gradients
+                b1, b2 = group["betas"]
+                t = state['t']
+                state['m_t'] = b1 * state['m_t'] + (1 - b1) * grad
+                state['v_t'] = b2 * state['v_t'] + (1 - b2) * (grad * grad)
+                # 2. apply bias correction
+                a_t = alpha * math.sqrt(1 - b2**(t + 1)) / (1 - b1**(t + 1))
+                # 3. apply weight decay (I switched the order to reflect pytorch's official implementation, 
+                # which does the weight decay before the ADAM update
+                p.data *=  (1 - alpha * group['weight_decay'])
+                # 4. update parameters (p.data) - ADAM
+                p.data -= a_t * state['m_t'] / (state['v_t'].sqrt() + group['eps'])
+                # increment time step
+                state['t'] += 1
 
         return loss

@@ -43,8 +43,10 @@ class CausalSelfAttention(nn.Module):
       1.0 / math.sqrt(self.attention_head_size))  # [b, h, tq, tk]
 
     causal_mask = torch.tril(torch.ones(t, t, device=key.device))  # [t, t]
-    causal_mask = causal_mask.view(1, 1, t, t)  # [1, 1, tq, tk]    
-    mask = causal_mask & (attention_mask == 0)  # [b, 1, tq, tk]
+    causal_mask = causal_mask.view(1, 1, t, t)  # [1, 1, tq, tk]
+    causal_mask = causal_mask.bool() # convert to bool
+    attention_mask = ~(attention_mask.bool()) # true for non-padding tokens
+    mask = causal_mask & attention_mask  # [b, 1, tq, tk]
 
     raw_attn = raw_attn.masked_fill(~mask, float('-inf'))  
     attn = self.dropout(F.softmax(raw_attn, dim=-1))
