@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import csv
 
 import torch
+from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2Tokenizer
@@ -37,7 +38,7 @@ class GPT2SentimentClassifier(torch.nn.Module):
   This module performs sentiment classification using GPT2 in a cloze-style (fill-in-the-blank) task.
 
   In the SST dataset, there are 5 sentiment categories (from 0 - "negative" to 4 - "positive").
-  Thus, your forward() should return one logit for each of the 5 classes.
+  Thus, your forward() should return **one logit for each of the 5 classes**.
   '''
 
   def __init__(self, config):
@@ -45,17 +46,19 @@ class GPT2SentimentClassifier(torch.nn.Module):
     self.num_labels = config.num_labels
     self.gpt = GPT2Model.from_pretrained()
 
-    # Pretrain mode does not require updating GPT paramters.
     assert config.fine_tune_mode in ["last-linear-layer", "full-model"]
     for param in self.gpt.parameters():
+      # Pretrain mode does not require updating GPT paramters.
       if config.fine_tune_mode == 'last-linear-layer':
         param.requires_grad = False
+      # However, finetune mode does
       elif config.fine_tune_mode == 'full-model':
         param.requires_grad = True
 
-    ### TODO: Create any instance variables you need to classify the sentiment of BERT embeddings.
+    ### TODO: Create any instance variables you need to classify the sentiment of GPT hidden embeddings.
     ### YOUR CODE HERE
-    raise NotImplementedError
+    self.cls_dropout = nn.Dropout(config.hidden_dropout_prob)
+    self.cls_linear = nn.Linear(config.hidden_size, self.num_labels)
 
 
   def forward(self, input_ids, attention_mask):
@@ -65,8 +68,10 @@ class GPT2SentimentClassifier(torch.nn.Module):
     ###       HINT: You should consider what is an appropriate return value given that
     ###       the training loop currently uses F.cross_entropy as the loss function.
     ### YOUR CODE HERE
-    raise NotImplementedError
-
+    last_hidden_state = self.gpt.forward(input_ids, attention_mask)['last_hidden_state'] 
+    # The tensor above has dimensions [B, T, H]: it is ALL tokens' hidden states after a forward pass -> we only need the last one
+    last_hidden_state = last_hidden_state[:,-1,:]
+    return self.cls_linear(self.cls_dropout(last_hidden_state)) # drop out, then linear project
 
 
 class SentimentDataset(Dataset):

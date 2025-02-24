@@ -9,3 +9,8 @@ out/
 # python
 __pycache__/
 out/
+
+*.DS_Store
+
+# vscode
+.vscode/

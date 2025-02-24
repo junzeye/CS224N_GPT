@@ -104,6 +104,7 @@ class GPT2Model(GPTPreTrainedModel):
       return hidden_state(s) * E^T
     """
     ### YOUR CODE HERE
+    # TODO: Need to implement this for Section 7.1 Paraphrase Detection
     raise NotImplementedError
 
 
