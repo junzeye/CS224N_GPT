@@ -6,6 +6,9 @@
 .idea/
 out/
 
+# virtual environment
+cs224n/
+
 # python
 __pycache__/
 out/
