@@ -105,7 +105,8 @@ class GPT2Model(GPTPreTrainedModel):
     """
     ### YOUR CODE HERE
     # TODO: Need to implement this for Section 7.1 Paraphrase Detection
-    raise NotImplementedError
+    # hidden_state dimension: (B, H) or (H)
+    return hidden_state @ self.word_embedding.weight.T
 
 
   @classmethod

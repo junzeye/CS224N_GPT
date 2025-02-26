@@ -32,7 +32,7 @@ from models.gpt2 import GPT2Model
 
 from optimizer import AdamW
 
-TQDM_DISABLE = False
+TQDM_DISABLE = True
 
 # Fix the random seed.
 def seed_everything(seed=11711):
@@ -72,8 +72,8 @@ class ParaphraseGPT(nn.Module):
 
     'Takes a batch of sentences and produces embeddings for them.'
     ### YOUR CODE HERE
-    raise NotImplementedError
-
+    last_hidden_state = self.gpt(input_ids, attention_mask)['last_token'] # [B, H]
+    return self.gpt.hidden_state_to_token(last_hidden_state)
 
 
 def save_model(model, optimizer, args, filepath):
@@ -110,7 +110,7 @@ def train(args):
   model = model.to(device)
 
   lr = args.lr
-  optimizer = AdamW(model.parameters(), lr=lr, weight_decay=0.)
+  optimizer = AdamW(model.parameters(), lr=lr, weight_decay=0.01) # increase weight_decay for smaller datasets
   best_dev_acc = 0
 
   # Run for the specified number of epochs.
