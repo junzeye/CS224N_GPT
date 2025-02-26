@@ -7,6 +7,7 @@ Trains and evaluates GPT2SentimentClassifier on SST and CFIMDB
 import random, numpy as np, argparse
 from types import SimpleNamespace
 import csv
+import os
 
 import torch
 from torch import nn
@@ -19,7 +20,7 @@ from models.gpt2 import GPT2Model
 from optimizer import AdamW
 from tqdm import tqdm
 
-TQDM_DISABLE = False
+TQDM_DISABLE = True
 
 
 # Fix the random seed.
@@ -31,6 +32,12 @@ def seed_everything(seed=11711):
   torch.cuda.manual_seed_all(seed)
   torch.backends.cudnn.benchmark = False
   torch.backends.cudnn.deterministic = True
+
+
+# DEBUG: Function to log metrics to a file
+def log_metrics(log_file, dataset_name, epoch, train_loss, train_acc, dev_acc):
+  with open(log_file, 'a') as f:
+    f.write(f"{dataset_name},{epoch},{train_loss:.6f},{train_acc:.6f},{dev_acc:.6f}\n")
 
 
 class GPT2SentimentClassifier(torch.nn.Module):
@@ -64,13 +71,13 @@ class GPT2SentimentClassifier(torch.nn.Module):
   def forward(self, input_ids, attention_mask):
     '''Takes a batch of sentences and returns logits for sentiment classes'''
 
-    ### TODO: The final GPT contextualized embedding is the hidden state of the last token.
+    ### TODO: The final GPT contextualized embedding is the hidden state of the **last non-padding token**.
     ###       HINT: You should consider what is an appropriate return value given that
     ###       the training loop currently uses F.cross_entropy as the loss function.
     ### YOUR CODE HERE
-    last_hidden_state = self.gpt.forward(input_ids, attention_mask)['last_hidden_state'] 
-    # The tensor above has dimensions [B, T, H]: it is ALL tokens' hidden states after a forward pass -> we only need the last one
-    last_hidden_state = last_hidden_state[:,-1,:]
+    last_hidden_state = self.gpt.forward(input_ids, attention_mask)['last_token'] 
+    # The tensor above has dimensions [B, H],
+    # it is the hidden state of the last token after a forward pass -> we only need the last one
     return self.cls_linear(self.cls_dropout(last_hidden_state)) # drop out, then linear project
 
 
@@ -275,6 +282,15 @@ def train(args):
   optimizer = AdamW(model.parameters(), lr=lr)
   best_dev_acc = 0
 
+  # Create or check the log file
+  if args.log_file and not os.path.exists(os.path.dirname(args.log_file)):
+    os.makedirs(os.path.dirname(args.log_file))
+  
+  # Write header if file doesn't exist or is empty
+  if args.log_file and (not os.path.exists(args.log_file) or os.path.getsize(args.log_file) == 0):
+    with open(args.log_file, 'w') as f:
+      f.write("dataset,epoch,train_loss,train_acc,dev_acc\n")
+
   # Run for the specified number of epochs.
   for epoch in range(args.epochs):
     model.train()
@@ -308,12 +324,17 @@ def train(args):
       save_model(model, optimizer, args, config, args.filepath)
 
     print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+    
+    # Log metrics to file
+    if args.log_file:
+      dataset_name = os.path.basename(args.train).split('-')[1].split('.')[0]  # Extract dataset name from filename
+      log_metrics(args.log_file, dataset_name, epoch, train_loss, train_acc, dev_acc)
 
 
 def test(args):
   with torch.no_grad():
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-    saved = torch.load(args.filepath)
+    saved = torch.load(args.filepath, weights_only=False)
     config = saved['model_config']
     model = GPT2SentimentClassifier(config)
     model.load_state_dict(saved['model'])
@@ -351,7 +372,7 @@ def test(args):
 def get_args():
   parser = argparse.ArgumentParser()
   parser.add_argument("--seed", type=int, default=11711)
-  parser.add_argument("--epochs", type=int, default=10)
+  parser.add_argument("--epochs", type=int, default=15)
   parser.add_argument("--fine-tune-mode", type=str,
                       help='last-linear-layer: the GPT parameters are frozen and the task specific head parameters are updated; full-model: GPT parameters are updated as well',
                       choices=('last-linear-layer', 'full-model'), default="last-linear-layer")
@@ -361,6 +382,8 @@ def get_args():
   parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
   parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                       default=1e-3)
+  # NOTE: original recommended lr for 'pretrain' and 'finetune' are wrong: as starting point, use 1e-3 for linear layer finetune, and 1e-5 for full model finetune
+  parser.add_argument("--log_file", type=str, help="path to save training metrics", default="training_metrics.csv")
 
   args = parser.parse_args()
   return args
@@ -370,26 +393,27 @@ if __name__ == "__main__":
   args = get_args()
   seed_everything(args.seed)
 
-  print('Training Sentiment Classifier on SST...')
-  config = SimpleNamespace(
-    filepath='sst-classifier.pt',
-    lr=args.lr,
-    use_gpu=args.use_gpu,
-    epochs=args.epochs,
-    batch_size=args.batch_size,
-    hidden_dropout_prob=args.hidden_dropout_prob,
-    train='data/ids-sst-train.csv',
-    dev='data/ids-sst-dev.csv',
-    test='data/ids-sst-test-student.csv',
-    fine_tune_mode=args.fine_tune_mode,
-    dev_out='predictions/' + args.fine_tune_mode + '-sst-dev-out.csv',
-    test_out='predictions/' + args.fine_tune_mode + '-sst-test-out.csv'
-  )
+  # print('Training Sentiment Classifier on SST...')
+  # config = SimpleNamespace(
+  #   filepath='sst-classifier.pt',
+  #   lr=args.lr,
+  #   use_gpu=args.use_gpu,
+  #   epochs=args.epochs,
+  #   batch_size=args.batch_size,
+  #   hidden_dropout_prob=args.hidden_dropout_prob,
+  #   train='data/ids-sst-train.csv',
+  #   dev='data/ids-sst-dev.csv',
+  #   test='data/ids-sst-test-student.csv',
+  #   fine_tune_mode=args.fine_tune_mode,
+  #   dev_out='predictions/' + args.fine_tune_mode + '-sst-dev-out.csv',
+  #   test_out='predictions/' + args.fine_tune_mode + '-sst-test-out.csv',
+  #   log_file=args.log_file
+  # )
 
-  train(config)
+  # train(config)
 
-  print('Evaluating on SST...')
-  test(config)
+  # print('Evaluating on SST...')
+  # test(config)
 
   print('Training Sentiment Classifier on cfimdb...')
   config = SimpleNamespace(
@@ -397,14 +421,15 @@ if __name__ == "__main__":
     lr=args.lr,
     use_gpu=args.use_gpu,
     epochs=args.epochs,
-    batch_size=8,
+    batch_size=args.batch_size,
     hidden_dropout_prob=args.hidden_dropout_prob,
     train='data/ids-cfimdb-train.csv',
     dev='data/ids-cfimdb-dev.csv',
     test='data/ids-cfimdb-test-student.csv',
     fine_tune_mode=args.fine_tune_mode,
     dev_out='predictions/' + args.fine_tune_mode + '-cfimdb-dev-out.csv',
-    test_out='predictions/' + args.fine_tune_mode + '-cfimdb-test-out.csv'
+    test_out='predictions/' + args.fine_tune_mode + '-cfimdb-test-out.csv',
+    log_file=args.log_file
   )
 
   train(config)

@@ -1,0 +1,13 @@
+torch
+torchvision
+torchaudio
+tqdm
+requests
+importlib-metadata
+filelock
+scikit-learn
+tokenizers
+explainaboard_client
+einops
+transformers
+sacrebleu

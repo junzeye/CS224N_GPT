@@ -72,13 +72,14 @@ class AdamW(Optimizer):
                 t = state['t']
                 state['m_t'] = b1 * state['m_t'] + (1 - b1) * grad
                 state['v_t'] = b2 * state['v_t'] + (1 - b2) * (grad * grad)
+
                 # 2. apply bias correction
                 a_t = alpha * math.sqrt(1 - b2**(t + 1)) / (1 - b1**(t + 1))
-                # 3. apply weight decay (I switched the order to reflect pytorch's official implementation, 
-                # which does the weight decay before the ADAM update
-                p.data *=  (1 - alpha * group['weight_decay'])
-                # 4. update parameters (p.data) - ADAM
-                p.data -= a_t * state['m_t'] / (state['v_t'].sqrt() + group['eps'])
+
+                # 3. Update parameters with both Adam update and weight decay
+                adam_step = a_t * state['m_t'] / (state['v_t'].sqrt() + group['eps'])
+                p.data = p.data - adam_step - alpha * group['weight_decay'] * p.data
+
                 # increment time step
                 state['t'] += 1
 
