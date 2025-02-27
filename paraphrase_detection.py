@@ -101,9 +101,9 @@ def train(args):
   para_dev_data = ParaphraseDetectionDataset(para_dev_data, args)
 
   para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
-                                     collate_fn=para_train_data.collate_fn)
+                                     collate_fn=para_train_data.collate_fn, num_workers=4)
   para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
-                                   collate_fn=para_dev_data.collate_fn)
+                                   collate_fn=para_dev_data.collate_fn, num_workers=4)
 
   args = add_arguments(args)
   model = ParaphraseGPT(args)
@@ -136,6 +136,9 @@ def train(args):
       train_loss += loss.item()
       num_batches += 1
 
+      if num_batches % 100 == 0:
+        print(f"Epoch {epoch} batch {num_batches}: train loss :: {loss.item() :.3f}", flush=True)
+
     train_loss = train_loss / num_batches
 
     dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)
@@ -144,14 +147,14 @@ def train(args):
       best_dev_acc = dev_acc
       save_model(model, optimizer, args, args.filepath)
 
-    print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, dev acc :: {dev_acc :.3f}")
+    print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, dev acc :: {dev_acc :.3f}", flush=True)
 
 
 @torch.no_grad()
 def test(args):
   """Evaluate your model on the dev and test datasets; save the predictions to disk."""
   device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-  saved = torch.load(args.filepath)
+  saved = torch.load(args.filepath, weights_only=False)
 
   model = ParaphraseGPT(saved['args'])
   model.load_state_dict(saved['model'])
@@ -166,9 +169,9 @@ def test(args):
   para_test_data = ParaphraseDetectionTestDataset(para_test_data, args)
 
   para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
-                                   collate_fn=para_dev_data.collate_fn)
+                                   collate_fn=para_dev_data.collate_fn, num_workers=4)
   para_test_dataloader = DataLoader(para_test_data, shuffle=True, batch_size=args.batch_size,
-                                    collate_fn=para_test_data.collate_fn)
+                                    collate_fn=para_test_data.collate_fn, num_workers=4)
 
   dev_para_acc, _, dev_para_y_pred, _, dev_para_sent_ids = model_eval_paraphrase(para_dev_dataloader, model, device)
   print(f"dev paraphrase acc :: {dev_para_acc :.3f}")
@@ -195,7 +198,7 @@ def get_args():
   parser.add_argument("--para_test_out", type=str, default="predictions/para-test-output.csv")
 
   parser.add_argument("--seed", type=int, default=11711)
-  parser.add_argument("--epochs", type=int, default=10)
+  parser.add_argument("--epochs", type=int, default=15)
   parser.add_argument("--use_gpu", action='store_true')
 
   parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
@@ -231,5 +234,14 @@ if __name__ == "__main__":
   args = get_args()
   args.filepath = f'{args.epochs}-{args.lr}-paraphrase.pt'  # Save path.
   seed_everything(args.seed)  # Fix the seed for reproducibility.
+  # print the training hyperparameters
+  print(f"Training hyperparameters:")
+  print(f"Epochs: {args.epochs}")
+  print(f"Batch size: {args.batch_size}")
+  print(f"Learning rate: {args.lr}")
+  print(f"Model size: {args.model_size}")
+ 
+  print('Started training...', flush=True)
   train(args)
+  print('Started testing...', flush=True)
   test(args)
