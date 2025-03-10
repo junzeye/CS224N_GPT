@@ -53,6 +53,8 @@ class SonnetGPT(nn.Module):
     # By default, fine-tune the full model. TODO: this is maybe not idea.
     for param in self.gpt.parameters():
       param.requires_grad = True
+    
+
 
   def forward(self, input_ids, attention_mask):
     """
@@ -61,7 +63,8 @@ class SonnetGPT(nn.Module):
     not just the distribution over next tokens for the last token!
     """
     ### YOUR CODE HERE
-    raise NotImplementedError
+    last_hidden_state = self.gpt.forward(input_ids, attention_mask)['last_hidden_state'] # [B, T, H]
+    return self.gpt.hidden_state_to_token(last_hidden_state) # [B, T, V]
 
 
   def get_device(self):
@@ -69,7 +72,7 @@ class SonnetGPT(nn.Module):
       return param.device
 
   @torch.no_grad()
-  def generate(self, encoding, temperature=0.7, top_p=0.9, max_length=128):
+  def generate(self, encoding, temperature=0.7, top_p=0.9, max_length=512):
     """
     Generates an original sonnet using top-p sampling and softmax temperature.
 
@@ -91,7 +94,7 @@ class SonnetGPT(nn.Module):
 
       # Top-p (nucleus) sampling
       sorted_probs, sorted_indices = torch.sort(probs, descending=True)
-      cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+      cumulative_probs = torch.cumsum(sorted_probs, dim=-1) 
       top_p_mask = cumulative_probs <= top_p
       top_p_mask[..., 1:] = top_p_mask[..., :-1].clone()  # Shift mask right for proper thresholding
       top_p_mask[..., 0] = True  # Always include the highest probability token
@@ -186,15 +189,18 @@ def train(args):
 
 
 @torch.no_grad()
-def generate_submission_sonnets(args):
-  device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-  saved = torch.load(f'{args.epochs-1}_{args.filepath}', weights_only=False)
+def generate_submission_sonnets(args, custom_load = False):
+  if not custom_load: # load from one of the .pt files
+    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    saved = torch.load(f'{args.epochs-1}_{args.filepath}', weights_only=False)
 
-  model = SonnetGPT(saved['args'])
-  model.load_state_dict(saved['model'])
+    model = SonnetGPT(saved['args'])
+    model.load_state_dict(saved['model'])
+  else: # load from a custom checkpoint, for example, a .safetensors file
+    raise NotImplementedError("Custom loading not implemented")
+
   model = model.to(device)
   model.eval()
-
   # Create the held-out dataset: these only have the first 3 lines. Your job is to fill in the rest!
   held_out_sonnet_dataset = SonnetsDataset(args.held_out_sonnet_path)
 
@@ -228,7 +234,7 @@ def get_args():
   parser.add_argument("--use_gpu", action='store_true')
 
   # Generation parameters.
-  parser.add_argument("--temperature", type=float, help="softmax temperature.", default=1.2)
+  parser.add_argument("--temperature", type=float, help="softmax temperature.", default=1.0)
   parser.add_argument("--top_p", type=float, help="Cumulative probability distribution for nucleus sampling.",
                       default=0.9)
 

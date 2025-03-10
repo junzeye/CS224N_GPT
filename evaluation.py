@@ -64,8 +64,9 @@ def model_test_paraphrase(dataloader, model, device):
 
 def test_sonnet(
     test_path='predictions/generated_sonnets.txt',
-    gold_path='data/TRUE_sonnets_held_out.txt'
-):
+    gold_path='data/TRUE_sonnets_held_out_dev.txt'
+): 
+    '''Remember to configure the test_path and gold_path to the correct paths.'''
     chrf = CHRF()
 
     # get the sonnets
@@ -78,3 +79,7 @@ def test_sonnet(
     # compute chrf
     chrf_score = chrf.corpus_score(generated_sonnets, [true_sonnets])
     return float(chrf_score.score)
+
+
+if __name__ == '__main__':
+    print(test_sonnet())
