@@ -52,11 +52,28 @@ class ParaphraseDetectionDataset(Dataset):
     token_ids = torch.LongTensor(encoding['input_ids'])
     attention_mask = torch.LongTensor(encoding['attention_mask'])
 
+    # our customization - training regularization via contrastive loss
+    # compute also the individual sentence encodings, and includethem in the batched data
+    sent1_truncated = [s[:-1] for s in sent1] # remove the question mark at the end, but keep the white space after it (as sort of a thinking token)
+    sent2_truncated = [s[:-1] for s in sent2] # remove the question mark at the end, but keep the white space after it
+
+    encoding_s1 = self.tokenizer(sent1_truncated, return_tensors='pt', padding=True, truncation=True)
+    encoding_s2 = self.tokenizer(sent2_truncated, return_tensors='pt', padding=True, truncation=True)
+
+    token_ids_s1 = torch.LongTensor(encoding_s1['input_ids'])
+    attention_mask_s1 = torch.LongTensor(encoding_s1['attention_mask'])
+    token_ids_s2 = torch.LongTensor(encoding_s2['input_ids'])
+    attention_mask_s2 = torch.LongTensor(encoding_s2['attention_mask'])
+
     batched_data = {
       'token_ids': token_ids,
       'attention_mask': attention_mask,
       'labels': labels,
-      'sent_ids': sent_ids
+      'sent_ids': sent_ids,
+      'token_ids_s1': token_ids_s1,
+      'attention_mask_s1': attention_mask_s1,
+      'token_ids_s2': token_ids_s2,
+      'attention_mask_s2': attention_mask_s2
     }
 
     return batched_data

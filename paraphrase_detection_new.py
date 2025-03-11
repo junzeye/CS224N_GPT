@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.optim import AdamW
 from tqdm import tqdm
 
 from datasets import (
@@ -30,9 +31,7 @@ from datasets import (
 from evaluation import model_eval_paraphrase, model_test_paraphrase
 from models.gpt2 import GPT2Model
 
-from optimizer import AdamW
-
-TQDM_DISABLE = True
+TQDM_DISABLE = False
 
 # Fix the random seed.
 def seed_everything(seed=11711):
@@ -108,10 +107,12 @@ def train(args):
   args = add_arguments(args)
   model = ParaphraseGPT(args)
   model = model.to(device)
+  a1, a2 = args.a1, args.a2
 
   lr = args.lr
   optimizer = AdamW(model.parameters(), lr=lr, weight_decay=0.01) # increase weight_decay for smaller datasets
   best_dev_acc = 0
+  cos = nn.CosineSimilarity(dim=1, eps=1e-8)
 
   # Run for the specified number of epochs.
   for epoch in range(args.epochs):
@@ -125,11 +126,28 @@ def train(args):
       b_mask = b_mask.to(device)
       labels = labels.to(device)
 
+      # NOTE: our customization - training regularization via contrastive loss
+      labels_float = (labels == 8505).float() # 1 if paraphrase, 0 otherwise
+      s1_ids, s1_mask, s2_ids, s2_mask = batch['token_ids_s1'], batch['attention_mask_s1'], batch['token_ids_s2'], batch['attention_mask_s2']
+      s1_ids = s1_ids.to(device)
+      s1_mask = s1_mask.to(device)
+      s2_ids = s2_ids.to(device)
+      s2_mask = s2_mask.to(device)
+
+      s1_hidden_state = model.gpt(s1_ids, s1_mask)['last_token']
+      s2_hidden_state = model.gpt(s2_ids, s2_mask)['last_token']
+      # DEBUG: remove this line later
+      assert labels_float.shape == s1_hidden_state.shape[:1] == s2_hidden_state.shape[:1], "The shapes of the labels and the hidden states do not match"
+      # compute the cosine similarity between the two hidden states
+      contrastive_loss = torch.mean((- a1 * labels_float + a2 * (1 - labels_float)) * cos(s1_hidden_state, s2_hidden_state))
+
+
       # Compute the loss, gradients, and update the model's parameters.
       optimizer.zero_grad()
       logits = model(b_ids, b_mask)
       preds = torch.argmax(logits, dim=1)
-      loss = F.cross_entropy(logits, labels, reduction='mean')
+      ce_loss = F.cross_entropy(logits, labels, reduction='mean')
+      loss = ce_loss + contrastive_loss # including our regularization term
       loss.backward()
       optimizer.step()
 
@@ -145,7 +163,7 @@ def train(args):
 
     if dev_acc > best_dev_acc:
       best_dev_acc = dev_acc
-      save_model(model, optimizer, args, args.filepath)
+      save_model(model, optimizer, args, args.ckpt_path)
 
     print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, dev acc :: {dev_acc :.3f}", flush=True)
 
@@ -154,13 +172,13 @@ def train(args):
 def test(args):
   """Evaluate your model on the dev and test datasets; save the predictions to disk."""
   device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-  saved = torch.load(args.filepath, weights_only=False)
+  saved = torch.load(args.ckpt_path, weights_only=False)
 
   model = ParaphraseGPT(saved['args'])
   model.load_state_dict(saved['model'])
   model = model.to(device)
   model.eval()
-  print(f"Loaded model to test from {args.filepath}")
+  print(f"Loaded model to test from {args.ckpt_path}")
 
   para_dev_data = load_paraphrase_data(args.para_dev)
   para_test_data = load_paraphrase_data(args.para_test, split='test')
@@ -205,7 +223,10 @@ def get_args():
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str,
                       help="The model size as specified on hugging face. DO NOT use the xl model.",
-                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2-medium')
+                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2')
+  parser.add_argument("--a1", type=float, default=1) # weight for the contrastive loss (positive pairs)
+  parser.add_argument("--a2", type=float, default=0.1) # weight for the contrastive loss (negative pairs)
+  parser.add_argument("--ckpt_path", type=str, default="")
 
   args = parser.parse_args()
   return args
@@ -232,15 +253,13 @@ def add_arguments(args):
 
 if __name__ == "__main__":
   args = get_args()
-  args.filepath = f'{args.epochs}-{args.lr}-paraphrase.pt'  # Save path.
   seed_everything(args.seed)  # Fix the seed for reproducibility.
   # print the training hyperparameters
   print(f"Training hyperparameters:")
-  print(f"Epochs: {args.epochs}")
-  print(f"Batch size: {args.batch_size}")
-  print(f"Learning rate: {args.lr}")
-  print(f"Model size: {args.model_size}")
- 
+  print(f"Epochs: {args.epochs} Batch size: {args.batch_size} Learning rate: {args.lr} Model size: {args.model_size}")
+  print(f"alpha1: {args.a1} alpha2: {args.a2}")
+  print(f"Saving checkpoint to {args.ckpt_path}") # NOTE: checkpoint path should be created by the shell script
+
   print('Started training...', flush=True)
   train(args)
   print('Started testing...', flush=True)

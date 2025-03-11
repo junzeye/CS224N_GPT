@@ -16,7 +16,7 @@ from datasets import (
   SonnetsDataset,
 )
 
-TQDM_DISABLE = False
+TQDM_DISABLE = True
 
 
 @torch.no_grad()
