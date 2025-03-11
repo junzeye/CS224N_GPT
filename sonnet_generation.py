@@ -72,7 +72,7 @@ class SonnetGPT(nn.Module):
       return param.device
 
   @torch.no_grad()
-  def generate(self, encoding, temperature=0.7, top_p=0.9, max_length=512):
+  def generate(self, encoding, temperature=0.7, top_p=0.95, max_length=256):
     """
     Generates an original sonnet using top-p sampling and softmax temperature.
 
@@ -191,14 +191,13 @@ def train(args):
 @torch.no_grad()
 def generate_submission_sonnets(args, custom_load = False):
   if not custom_load: # load from one of the .pt files
-    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     saved = torch.load(f'{args.epochs-1}_{args.filepath}', weights_only=False)
-
-    model = SonnetGPT(saved['args'])
-    model.load_state_dict(saved['model'])
   else: # load from a custom checkpoint, for example, a .safetensors file
-    raise NotImplementedError("Custom loading not implemented")
+    saved = torch.load(args.filepath, weights_only=False)
 
+  model = SonnetGPT(saved['args'])
+  model.load_state_dict(saved['model'])
+  device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
   model = model.to(device)
   model.eval()
   # Create the held-out dataset: these only have the first 3 lines. Your job is to fill in the rest!
@@ -236,13 +235,13 @@ def get_args():
   # Generation parameters.
   parser.add_argument("--temperature", type=float, help="softmax temperature.", default=1.0)
   parser.add_argument("--top_p", type=float, help="Cumulative probability distribution for nucleus sampling.",
-                      default=0.9)
+                      default=0.95)
 
-  parser.add_argument("--batch_size", help='The training batch size.', type=int, default=8)
+  parser.add_argument("--batch_size", help='The training batch size.', type=int, default=16)
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str, help="The model size as specified on hugging face.",
                       choices=['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'], default='gpt2')
-
+  parser.add_argument("--filepath", type=str, help="The path to the model checkpoint.", default='')
   args = parser.parse_args()
   return args
 
@@ -268,7 +267,6 @@ def add_arguments(args):
 
 if __name__ == "__main__":
   args = get_args()
-  args.filepath = f'{args.epochs}-{args.lr}-sonnet.pt'  # Save path.
   seed_everything(args.seed)  # Fix the seed for reproducibility.
-  train(args)
-  generate_submission_sonnets(args)
+  # train(args)
+  generate_submission_sonnets(args, custom_load=True)

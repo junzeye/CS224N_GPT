@@ -82,4 +82,10 @@ def test_sonnet(
 
 
 if __name__ == '__main__':
-    print(test_sonnet())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test_path', type=str, default='predictions/generated_sonnets.txt')
+    parser.add_argument('--gold_path', type=str, default='data/TRUE_sonnets_held_out_dev.txt')
+    args = parser.parse_args()
+
+    print(test_sonnet(args.test_path, args.gold_path))
