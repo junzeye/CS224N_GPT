@@ -204,18 +204,16 @@ def train(args):
       loss.backward()
       
       # Add gradient clipping to prevent exploding gradients
-      torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+      torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=3.0)
       
       optimizer.step()
 
       train_loss += loss.item()
       num_batches += 1
 
-      if num_batches % 200 == 0:
+      if num_batches % 100 == 0:
         elapsed_time = time.time() - start_time
-        print(f"\nEpoch {epoch} batch {num_batches} / {len(para_train_dataloader)}: train loss :: {loss.item() :.3f}, elapsed time :: {elapsed_time / 60 :.1f}m", flush=True)
-        # Print additional diagnostic info
-        print(f"  - CE loss: {ce_loss.item():.3f}, Contrastive loss: {contrastive_loss.item():.3f}")
+        print(f"\nEpoch {epoch} batch {num_batches} / {len(para_train_dataloader)}: train loss :: {loss.item() :.3f}, CE loss: {ce_loss.item():.3f}, Contrastive loss: {contrastive_loss.item():.3f}, elapsed time :: {elapsed_time / 60 :.1f}m", flush=True)
 
       if num_batches % 400 == 0:
         dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)

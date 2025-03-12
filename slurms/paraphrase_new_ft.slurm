@@ -18,9 +18,9 @@
 #     --use_gpu \
 #     --ckpt_path ckpts/para/lr_1e-5_a1_0.1_a2_0.01.pt
 
-declare -a A1s=("0.001" "0.01" "0.1" "0")
-declare -a A2s=("0.001" "0.01" "0.1" "0")
-declare -a LRs=("1e-5" "1e-5" "1e-5" "2e-5")
+declare -a A1s=("0.01" "0.1" "0.1" "0.01")
+declare -a A2s=("0.001" "0.01" "0.1" "0.1")
+declare -a LRs=("2e-5" "2e-5" "2e-5" "2e-5")
 declare -a BATCH_SIZES=("32" "32" "32" "32")
 EPOCHS=2
 
