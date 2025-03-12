@@ -30,8 +30,10 @@ from datasets import (
 )
 from evaluation import model_eval_paraphrase, model_test_paraphrase
 from models.gpt2 import GPT2Model
+import time
 
-TQDM_DISABLE = False
+TQDM_DISABLE = True
+start_time = time.time()
 
 # Fix the random seed.
 def seed_everything(seed=11711):
@@ -112,7 +114,7 @@ def train(args):
   lr = args.lr
   optimizer = AdamW(model.parameters(), lr=lr, weight_decay=0.01) # increase weight_decay for smaller datasets
   best_dev_acc = 0
-  cos = nn.CosineSimilarity(dim=1, eps=1e-8)
+  cos = nn.CosineSimilarity(dim=1, eps=1e-6)
 
   # Run for the specified number of epochs.
   for epoch in range(args.epochs):
@@ -134,30 +136,95 @@ def train(args):
       s2_ids = s2_ids.to(device)
       s2_mask = s2_mask.to(device)
 
-      s1_hidden_state = model.gpt(s1_ids, s1_mask)['last_token']
-      s2_hidden_state = model.gpt(s2_ids, s2_mask)['last_token']
-      # DEBUG: remove this line later
-      assert labels_float.shape == s1_hidden_state.shape[:1] == s2_hidden_state.shape[:1], "The shapes of the labels and the hidden states do not match"
+      s1_hidden_state = model.gpt(s1_ids, s1_mask)['last_token'] # [B, H]
+      s2_hidden_state = model.gpt(s2_ids, s2_mask)['last_token'] # [B, H]
+      
+      # Check for NaN in hidden states
+      if torch.isnan(s1_hidden_state).any() or torch.isnan(s2_hidden_state).any():
+          nan_indices_s1 = torch.where(torch.isnan(s1_hidden_state).any(dim=1))[0]
+          nan_indices_s2 = torch.where(torch.isnan(s2_hidden_state).any(dim=1))[0]
+          nan_indices = torch.unique(torch.cat([nan_indices_s1, nan_indices_s2]))
+          sentence_ids = batch['sent_ids'][nan_indices]
+          
+          # Debug the debugging: Which samples have NaNs?
+          nan_mask_s1 = torch.isnan(s1_hidden_state).any(dim=1)
+          print(f"s1_hidden_state shape: {s1_hidden_state.shape}, NaN mask shape: {nan_mask_s1.shape}, count: {nan_mask_s1.sum().item()}")
+          
+          print(f"NaN detected in hidden states, epoch: {epoch}, batch: {num_batches}, problematic sentence_ids:\n{sentence_ids}")
+          continue # Skip this batch
+      
       # compute the cosine similarity between the two hidden states
-      contrastive_loss = torch.mean((- a1 * labels_float + a2 * (1 - labels_float)) * cos(s1_hidden_state, s2_hidden_state))
+      cos_sim = cos(s1_hidden_state, s2_hidden_state)
+      
+      # Check cosine similarity 
+      if torch.isnan(cos_sim).any():
+          nan_indices = torch.where(torch.isnan(cos_sim))[0]
+          sentence_ids = batch['sent_ids'][nan_indices]
+          print(f"NaN detected in cosine similarity, epoch: {epoch}, batch: {num_batches}, problematic sentence_ids:\n{sentence_ids}")
+          continue # Skip this batch
+          
+      # Use a more numerically stable contrastive loss calculation
+      contrastive_loss = torch.tensor(0.0, device=device)
+      if a1 > 0 or a2 > 0:  # Only compute if weights are non-zero
+          # Add small epsilon to avoid extreme values
+          cos_sim = torch.clamp(cos_sim, min=-0.999, max=0.999)
+          contrastive_loss = torch.mean((- a1 * labels_float + a2 * (1 - labels_float)) * cos_sim)
+          
+          # Check contrastive loss
+          if torch.isnan(contrastive_loss).any():
+              print(f"NaN detected in contrastive loss, epoch: {epoch}, batch: {num_batches}")
 
+      # clear the cache
+      s1_ids, s1_mask, s2_ids, s2_mask = None, None, None, None
+      s1_hidden_state, s2_hidden_state = None, None
+      torch.cuda.empty_cache()
 
       # Compute the loss, gradients, and update the model's parameters.
       optimizer.zero_grad()
       logits = model(b_ids, b_mask)
-      preds = torch.argmax(logits, dim=1)
+      
+      # Check for NaN in logits
+      if torch.isnan(logits).any():
+          print(f"WARNING: NaN detected in model output logits, epoch: {epoch}, batch: {num_batches}")
+          continue  # Skip this batch
+          
       ce_loss = F.cross_entropy(logits, labels, reduction='mean')
-      loss = ce_loss + contrastive_loss # including our regularization term
+      
+      # Check for NaN in CE loss
+      if torch.isnan(ce_loss).any():
+          print(f"WARNING: NaN detected in cross entropy loss, epoch: {epoch}, batch: {num_batches}")
+          continue  # Skip this batch
+          
+      loss = ce_loss + contrastive_loss  # including our regularization term
+      
+      if torch.isnan(loss).any():
+          print(f"WARNING: NaN detected in final loss, epoch: {epoch}, batch: {num_batches}")
+          continue  # Skip this batch
+          
       loss.backward()
+      
+      # Add gradient clipping to prevent exploding gradients
+      torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+      
       optimizer.step()
 
       train_loss += loss.item()
       num_batches += 1
 
-      if num_batches % 100 == 0:
-        print(f"Epoch {epoch} batch {num_batches}: train loss :: {loss.item() :.3f}", flush=True)
+      if num_batches % 200 == 0:
+        elapsed_time = time.time() - start_time
+        print(f"\nEpoch {epoch} batch {num_batches} / {len(para_train_dataloader)}: train loss :: {loss.item() :.3f}, elapsed time :: {elapsed_time / 60 :.1f}m", flush=True)
+        # Print additional diagnostic info
+        print(f"  - CE loss: {ce_loss.item():.3f}, Contrastive loss: {contrastive_loss.item():.3f}")
 
-    train_loss = train_loss / num_batches
+      if num_batches % 400 == 0:
+        dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)
+        print(f"dev acc :: {dev_acc :.3f}, dev f1 :: {dev_f1 :.3f}", flush=True)
+        if dev_acc > best_dev_acc:
+          best_dev_acc = dev_acc
+          save_model(model, optimizer, args, args.ckpt_path)
+
+    train_loss = train_loss / (num_batches if num_batches > 0 else 1)  # Avoid division by zero
 
     dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)
 
@@ -165,7 +232,7 @@ def train(args):
       best_dev_acc = dev_acc
       save_model(model, optimizer, args, args.ckpt_path)
 
-    print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, dev acc :: {dev_acc :.3f}", flush=True)
+    print(f"\nEpoch {epoch}: train loss :: {train_loss :.3f}, dev acc :: {dev_acc :.3f}", flush=True)
 
 
 @torch.no_grad()
@@ -223,7 +290,7 @@ def get_args():
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str,
                       help="The model size as specified on hugging face. DO NOT use the xl model.",
-                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2')
+                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2-medium')
   parser.add_argument("--a1", type=float, default=1) # weight for the contrastive loss (positive pairs)
   parser.add_argument("--a2", type=float, default=0.1) # weight for the contrastive loss (negative pairs)
   parser.add_argument("--ckpt_path", type=str, default="")
@@ -257,10 +324,10 @@ if __name__ == "__main__":
   # print the training hyperparameters
   print(f"Training hyperparameters:")
   print(f"Epochs: {args.epochs} Batch size: {args.batch_size} Learning rate: {args.lr} Model size: {args.model_size}")
-  print(f"alpha1: {args.a1} alpha2: {args.a2}")
+  print(f"a1: {args.a1} a2: {args.a2}")
   print(f"Saving checkpoint to {args.ckpt_path}") # NOTE: checkpoint path should be created by the shell script
 
   print('Started training...', flush=True)
   train(args)
-  print('Started testing...', flush=True)
-  test(args)
+  # print('Started testing...', flush=True)
+  # test(args)

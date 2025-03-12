@@ -30,8 +30,11 @@ from datasets import (
 from evaluation import model_eval_paraphrase, model_test_paraphrase
 from models.gpt2 import GPT2Model
 
-from optimizer import AdamW
+# from optimizer import AdamW
+from torch.optim import AdamW
+import time
 
+start_time = time.time()
 TQDM_DISABLE = True
 
 # Fix the random seed.
@@ -139,6 +142,13 @@ def train(args):
       if num_batches % 100 == 0:
         print(f"Epoch {epoch} batch {num_batches}: train loss :: {loss.item() :.3f}", flush=True)
 
+      if num_batches % 400 == 0:
+        dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)
+        print(f"dev acc :: {dev_acc :.3f}, dev f1 :: {dev_f1 :.3f}", flush=True)
+        if dev_acc > best_dev_acc:
+          best_dev_acc = dev_acc
+          save_model(model, optimizer, args, args.filepath)
+
     train_loss = train_loss / num_batches
 
     dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)
@@ -201,12 +211,12 @@ def get_args():
   parser.add_argument("--epochs", type=int, default=15)
   parser.add_argument("--use_gpu", action='store_true')
 
-  parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
+  parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=32)
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str,
                       help="The model size as specified on hugging face. DO NOT use the xl model.",
                       choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2-medium')
-
+  parser.add_argument("--filepath", help="path to save the torch ckpt", type=str, default="")
   args = parser.parse_args()
   return args
 
@@ -232,7 +242,7 @@ def add_arguments(args):
 
 if __name__ == "__main__":
   args = get_args()
-  args.filepath = f'{args.epochs}-{args.lr}-paraphrase.pt'  # Save path.
+  # args.filepath = f'{args.epochs}-{args.lr}-paraphrase.pt'  # Save path.
   seed_everything(args.seed)  # Fix the seed for reproducibility.
   # print the training hyperparameters
   print(f"Training hyperparameters:")
@@ -240,8 +250,8 @@ if __name__ == "__main__":
   print(f"Batch size: {args.batch_size}")
   print(f"Learning rate: {args.lr}")
   print(f"Model size: {args.model_size}")
- 
+  print(f"Filepath: {args.filepath}")
   print('Started training...', flush=True)
   train(args)
-  print('Started testing...', flush=True)
-  test(args)
+  # print('Started testing...', flush=True)
+  # test(args)
