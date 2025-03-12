@@ -15,8 +15,10 @@ LEARNING_RATES=("0.0001" "1e-05" "1e-06")
 
 for i in {0..2}; do
     LR=${LEARNING_RATES[$i]}
+    begin_cpu=$((i * 3))
+    end_cpu=$((begin_cpu + 2))
     echo "Evaluating dev set with learning rate: $LR"
-    CUDA_VISIBLE_DEVICES=$i python3 sonnet_generation.py \
+    CUDA_VISIBLE_DEVICES=$i taskset -c $begin_cpu-$end_cpu python3 sonnet_generation.py \
         --use_gpu \
         --held_out_sonnet_path data/sonnets_held_out_dev.txt \
         --sonnet_out predictions/generated_sonnets_dev_lr_${LR}.txt \
