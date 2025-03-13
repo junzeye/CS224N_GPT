@@ -288,7 +288,7 @@ def get_args():
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str,
                       help="The model size as specified on hugging face. DO NOT use the xl model.",
-                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2-medium')
+                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2')
   parser.add_argument("--a1", type=float, default=1) # weight for the contrastive loss (positive pairs)
   parser.add_argument("--a2", type=float, default=0.1) # weight for the contrastive loss (negative pairs)
   parser.add_argument("--ckpt_path", type=str, default="")
