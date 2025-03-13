@@ -6,7 +6,7 @@
 #SBATCH -N 1
 #SBATCH -t 0-6:30:00
 #SBATCH -G 4
-#SBATCH --nodelist=yen-gpu1
+#SBATCH --nodelist=yen-gpu2
 #SBATCH -o out/%j.out
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=junze@stanford.edu
