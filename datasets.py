@@ -54,12 +54,12 @@ class ParaphraseDetectionDataset(Dataset):
 
     # our customization - training regularization via contrastive loss
     # compute also the individual sentence encodings, and includethem in the batched data
-    # sent1_truncated = [s[:-1] for s in sent1] # remove the question mark at the end, but keep the white space after it (as sort of a thinking token)
-    # sent2_truncated = [s[:-1] for s in sent2] # remove the question mark at the end, but keep the white space after it
+    sent1_cleaned = [s if len(s) > 0 else '?' for s in sent1]
+    sent2_cleaned = [s if len(s) > 0 else '?' for s in sent2]
     # NOTE: the above truncation is disabled because it could result in empty sentences and cause nan errors in hidden state encodings
 
-    encoding_s1 = self.tokenizer(sent1, return_tensors='pt', padding=True, truncation=True)
-    encoding_s2 = self.tokenizer(sent2, return_tensors='pt', padding=True, truncation=True)
+    encoding_s1 = self.tokenizer(sent1_cleaned, return_tensors='pt', padding=True, truncation=True)
+    encoding_s2 = self.tokenizer(sent2_cleaned, return_tensors='pt', padding=True, truncation=True)
 
     token_ids_s1 = torch.LongTensor(encoding_s1['input_ids'])
     attention_mask_s1 = torch.LongTensor(encoding_s1['attention_mask'])

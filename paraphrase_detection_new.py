@@ -213,11 +213,11 @@ def train(args):
 
       if num_batches % 100 == 0:
         elapsed_time = time.time() - start_time
-        print(f"\nEpoch {epoch} batch {num_batches} / {len(para_train_dataloader)}: train loss :: {loss.item() :.3f}, CE loss: {ce_loss.item():.3f}, Contrastive loss: {contrastive_loss.item():.3f}, elapsed time :: {elapsed_time / 60 :.1f}m", flush=True)
+        print(f"Epoch {epoch} batch {num_batches} / {len(para_train_dataloader)}: train loss :: {loss.item() :.3f}, CE loss: {ce_loss.item():.3f}, Contrastive loss: {contrastive_loss.item():.3f}, elapsed time :: {elapsed_time / 60 :.1f}m", flush=True)
 
       if num_batches % 400 == 0:
         dev_acc, dev_f1, *_ = model_eval_paraphrase(para_dev_dataloader, model, device)
-        print(f"dev acc :: {dev_acc :.3f}, dev f1 :: {dev_f1 :.3f}", flush=True)
+        print(f"dev acc :: {dev_acc :.3f}, dev f1 :: {dev_f1 :.3f}\n", flush=True)
         if dev_acc > best_dev_acc:
           best_dev_acc = dev_acc
           save_model(model, optimizer, args, args.ckpt_path)
