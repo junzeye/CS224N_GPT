@@ -2,7 +2,7 @@ declare -a LEARNING_RATES=("2e-05" "1e-05")
 declare -a A1s=("1" "0.1" "5")
 declare -a A2s=("1" "0.1" "5")
 BATCH_SIZE=32
-EPOCHS=1
+EPOCHS=2
 
 # Create a task array with all combinations
 TASKS=()
@@ -61,12 +61,10 @@ function run_task {
     RUNNING_TASKS_INFO[$worker_id]="LR=${lr}, a1=${a1}, a2=${a2}, batch_size=${batch_size}, epochs=${epochs}"
     
     echo "$(date): Starting task with learning rate: $lr, a1: $a1, a2: $a2, batch_size: $batch_size, epochs: $epochs on worker $worker_id (GPU ${GPUS[$worker_id]})"
-    
+    echo "$(date): DEBUG: Running command with CUDA_VISIBLE_DEVICES=${GPUS[$worker_id]}"
+
     # Create output directories if they don't exist
     mkdir -p ckpts/para out/paraphrase
-    
-    # Add debug info about what command we're running
-    echo "$(date): DEBUG: Running command with CUDA_VISIBLE_DEVICES=${GPUS[$worker_id]}"
     
     # First run a quick test to see if the Python script exists and is executable
     if [ ! -f "paraphrase_detection_new.py" ]; then
@@ -77,6 +75,7 @@ function run_task {
     # Run the task with explicit error logging
     CUDA_VISIBLE_DEVICES=${GPUS[$worker_id]} \
     python3 paraphrase_detection_new.py \
+        --a1 "${a1}" --a2 "${a2}" --lr "${lr}" \
         --use_gpu \
         --ckpt_path "ckpts/para/epoch_${epochs}-bs_${batch_size}-lr_${lr}-a1_${a1}-a2_${a2}.pt" \
         --batch_size "${batch_size}" \

@@ -166,8 +166,6 @@ def train(args):
       # Use a more numerically stable contrastive loss calculation
       contrastive_loss = torch.tensor(0.0, device=device)
       if a1 > 0 or a2 > 0:  # Only compute if weights are non-zero
-          # Add small epsilon to avoid extreme values
-          cos_sim = torch.clamp(cos_sim, min=-0.999, max=0.999)
           contrastive_loss = torch.mean((- a1 * labels_float + a2 * (1 - labels_float)) * cos_sim)
           
           # Check contrastive loss
