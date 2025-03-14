@@ -20,6 +20,7 @@ from tqdm import tqdm
 from transformers import GPT2Tokenizer
 from einops import rearrange
 
+from sacrebleu.metrics import CHRF
 from datasets import (
   SonnetsDataset,
 )
@@ -177,19 +178,45 @@ def train(args):
 
     train_loss = train_loss / num_batches
     print(f"Epoch {epoch}: train loss :: {train_loss :.3f}.")
-    print('Generating several output sonnets...')
-    model.eval()
-    for batch in held_out_sonnet_dataset:
-      encoding = model.tokenizer(batch[1], return_tensors='pt', padding=True, truncation=True).to(device)
-      output = model.generate(encoding['input_ids'], temperature=args.temperature, top_p=args.top_p)
-      print(f'{batch[1]}{output[1]}\n\n')
+    # print('Generating several output sonnets...')
+    # model.eval()
+    # for batch in held_out_sonnet_dataset:
+    #   encoding = model.tokenizer(batch[1], return_tensors='pt', padding=True, truncation=True).to(device)
+    #   output = model.generate(encoding['input_ids'], temperature=args.temperature, top_p=args.top_p)
+    #   print(f'{batch[1]}{output[1]}\n\n')
 
     # TODO: consider a stopping condition to prevent overfitting on the small dataset of sonnets.
-    save_model(model, optimizer, args, f'{epoch}_{args.filepath}')
-
+    chrf_score = eval_chrf(args, model, held_out_sonnet_dataset)
+    print(f"Dev set CHRF score: {chrf_score}")
+    save_model(model, optimizer, args, args.filepath)
 
 @torch.no_grad()
-def generate_submission_sonnets(args, custom_load = False):
+def eval_chrf(args, model, held_out_sonnet_dataset):
+  model.eval()
+  device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+
+  generated_sonnets = []
+  for batch in held_out_sonnet_dataset:
+    sonnet_id = batch[0]
+    encoding = model.tokenizer(batch[1], return_tensors='pt', padding=False, truncation=True).to(device)
+    output = model.generate(encoding['input_ids'], temperature=args.temperature, top_p=args.top_p)[0][0]
+    decoded_output = model.tokenizer.decode(output)
+    full_sonnet = f'{decoded_output}\n\n'
+    # Store just the sonnet text, not the tuple
+    generated_sonnets.append(full_sonnet)
+
+  true_sonnets = [x[1] for x in SonnetsDataset('data/TRUE_sonnets_held_out_dev.txt')]
+  max_len = min(len(true_sonnets), len(generated_sonnets))
+  true_sonnets = true_sonnets[:max_len]
+  generated_sonnets = generated_sonnets[:max_len]
+
+  # compute chrf
+  chrf = CHRF()
+  chrf_score = chrf.corpus_score(generated_sonnets, [true_sonnets])
+  return float(chrf_score.score)
+
+@torch.no_grad()
+def generate_submission_sonnets(args, custom_load = True):
   if not custom_load: # load from one of the .pt files
     saved = torch.load(f'{args.epochs-1}_{args.filepath}', weights_only=False)
   else: # load from a custom checkpoint, for example, a .safetensors file
@@ -212,7 +239,7 @@ def generate_submission_sonnets(args, custom_load = False):
     full_sonnet = f'{decoded_output}\n\n'
     generated_sonnets.append((sonnet_id, full_sonnet))
 
-    print(f'{decoded_output}\n\n')
+    # print(f'{decoded_output}\n\n')
 
   with open(args.sonnet_out, "w+") as f:
     f.write(f"--Generated Sonnets-- \n\n")
@@ -268,5 +295,9 @@ def add_arguments(args):
 if __name__ == "__main__":
   args = get_args()
   seed_everything(args.seed)  # Fix the seed for reproducibility.
+  # print(f"Training sonnet generation model with {args.model_size}... lr = {args.lr}, batch size = {args.batch_size}, epochs = {args.epochs}")
+  # print(f'generation output path: {args.sonnet_out}, ckpt save path: {args.filepath}')
   # train(args)
+  # print('done training\n')
   generate_submission_sonnets(args, custom_load=True)
+  print('done generating final submission sonnets\n')

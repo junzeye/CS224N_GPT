@@ -2,36 +2,23 @@
 
 #SBATCH -J dfp
 #SBATCH -p gpu
-#SBATCH -c 9
+#SBATCH -c 4
 #SBATCH -N 1
-#SBATCH -t 0-5:00:00
-#SBATCH -G 3
+#SBATCH -t 0-02:00:00
+#SBATCH -G 1
 #SBATCH --nodelist=yen-gpu3
-#SBATCH -o out/sonnets/%j.out
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=junze@stanford.edu
 
-# Define an array of learning rates
-LEARNING_RATES=(0.0001 0.00001 0.000001)
+echo "Running sonnet generation with learning rate: $LR, batch size: $BATCH_SIZE, epochs: $EPOCHS..."
 
-# Loop through GPUs and learning rates
-for i in {0..2}; do
-    LR=${LEARNING_RATES[$i]}
-    echo "Running with learning rate: $LR"
-    OUTPUT_PATH="predictions/generated_sonnets_lr_${LR}.txt"
-    
-    # Assign 3 non-overlapping cores to each process
-    START_CORE=$((i*3))
-    END_CORE=$((START_CORE+2))
-    
-    CUDA_VISIBLE_DEVICES=$i taskset -c $START_CORE-$END_CORE python3 sonnet_generation.py \
-        --use_gpu \
-        --epochs 1 \
-        --model_size gpt2-large \
-        --lr $LR \
-        --sonnet_out $OUTPUT_PATH \
-        > out/sonnets/batch_16_lr_${LR}.log 2>&1 &
-done
+python3 sonnet_generation.py \
+    --use_gpu \
+    --epochs $EPOCHS \
+    --batch_size $BATCH_SIZE \
+    --lr $LR \
+    --filepath ckpts/sonnets/${SLURM_JOB_NAME}.pt \
+    --held_out_sonnet_path data/sonnets_held_out.txt \
+    --sonnet_out predictions/sonnets/${SLURM_JOB_NAME}.txt
 
-wait
-
+# use held out dev set for evaluation (so that we can calculate CHRF score locally)
