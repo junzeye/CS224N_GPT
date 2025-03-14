@@ -242,16 +242,16 @@ def add_arguments(args):
 
 if __name__ == "__main__":
   args = get_args()
-  # args.filepath = f'{args.epochs}-{args.lr}-paraphrase.pt'  # Save path.
-  seed_everything(args.seed)  # Fix the seed for reproducibility.
-  # print the training hyperparameters
-  print(f"Training hyperparameters:")
-  print(f"Epochs: {args.epochs}")
-  print(f"Batch size: {args.batch_size}")
-  print(f"Learning rate: {args.lr}")
-  print(f"Model size: {args.model_size}")
-  print(f"Filepath: {args.filepath}")
-  print('Started training...', flush=True)
-  train(args)
-  # print('Started testing...', flush=True)
-  # test(args)
+  # # args.filepath = f'{args.epochs}-{args.lr}-paraphrase.pt'  # Save path.
+  # seed_everything(args.seed)  # Fix the seed for reproducibility.
+  # # print the training hyperparameters
+  # print(f"Training hyperparameters:")
+  # print(f"Epochs: {args.epochs}")
+  # print(f"Batch size: {args.batch_size}")
+  # print(f"Learning rate: {args.lr}")
+  # print(f"Model size: {args.model_size}")
+  # print(f"Filepath: {args.filepath}")
+  # print('Started training...', flush=True)
+  # train(args)
+  print('Started testing...', flush=True)
+  test(args)
