@@ -30,7 +30,13 @@ def model_eval_paraphrase(dataloader, model, device):
     b_ids = b_ids.to(device)
     b_mask = b_mask.to(device)
 
-    logits = model(b_ids, b_mask).cpu().numpy()
+    logits = model(b_ids, b_mask)
+    # Mask out all columns except 3919 and 8505 -> denoise
+    keep_indices = torch.tensor([3919, 8505], device=device)
+    mask = torch.ones_like(logits) * float('-inf')
+    mask[:, keep_indices] = 0
+    logits = logits + mask
+    logits = logits.cpu().numpy()
     preds = np.argmax(logits, axis=1).flatten()
 
     y_true.extend(labels)

@@ -215,7 +215,7 @@ def get_args():
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str,
                       help="The model size as specified on hugging face. DO NOT use the xl model.",
-                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2-medium')
+                      choices=['gpt2', 'gpt2-medium', 'gpt2-large'], default='gpt2')
   parser.add_argument("--filepath", help="path to save the torch ckpt", type=str, default="")
   args = parser.parse_args()
   return args
@@ -253,5 +253,6 @@ if __name__ == "__main__":
   # print(f"Filepath: {args.filepath}")
   # print('Started training...', flush=True)
   # train(args)
-  print('Started testing...', flush=True)
+  print(f'Started testing...loading model from {args.filepath}', flush=True)
+  print(f'Saving dev predictions to {args.para_dev_out}, and test predictions to {args.para_test_out}', flush=True)
   test(args)
